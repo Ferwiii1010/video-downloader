@@ -1,8 +1,6 @@
 const express = require('express');
-const { exec } = require('child_process');
+const ytdl = require('yt-dlp-exec');
 const cors = require('cors');
-const util = require('util');
-const execPromise = util.promisify(exec);
 const app = express();
 
 app.use(cors({
@@ -18,21 +16,43 @@ app.get('/download', async (req, res) => {
   const format = req.query.format;
   const type = req.query.type.toLowerCase();
   try {
-    let command;
+    let outputFile;
+    let options = { output: '' };
+
     if(type === 'video') {
-      command = `yt-dlp -f "${format.includes('720') ? 'best[height<=720]' : 'best[height<=1080]'}" -o "video.%(ext)s" "${url}"`;
+      outputFile = `video.mp4`;
+      options = {
+        output: outputFile,
+        format: format.includes('720') ? 'best[height<=720]' : 'best[height<=1080]'
+      };
     } else if(type === 'audio') {
-      command = `yt-dlp -x --audio-format mp3 -o "audio.%(ext)s" "${url}"`;
+      outputFile = `audio.mp3`;
+      options = {
+        output: outputFile,
+        extractAudio: true,
+        audioFormat: 'mp3'
+      };
     } else if(type === 'subtitles') {
-      command = `yt-dlp --write-sub --sub-format ${format.toLowerCase()} --skip-download -o "subtitles.%(ext)s" "${url}"`;
+      outputFile = `subtitles.${format.toLowerCase()}`;
+      options = {
+        output: outputFile,
+        writeSub: true,
+        subFormat: format.toLowerCase(),
+        skipDownload: true
+      };
     } else if(type === 'thumbnail') {
-      command = `yt-dlp --write-thumbnail --skip-download -o "thumbnail.%(ext)s" "${url}"`;
+      outputFile = `thumbnail.jpg`;
+      options = {
+        output: outputFile,
+        writeThumbnail: true,
+        skipDownload: true
+      };
     }
-    const { stdout } = await execPromise(command);
-    const filePath = type === 'video' ? 'video.mp4' : type === 'audio' ? 'audio.mp3' : type === 'subtitles' ? `subtitles.${format.toLowerCase()}` : 'thumbnail.jpg';
-    res.download(filePath, `${type}-${format.toLowerCase().split(' ')[0]}.${filePath.split('.').pop()}`, (err) => {
+
+    await ytdl(url, options);
+    res.download(outputFile, `${type}-${format.toLowerCase().split(' ')[0]}.${outputFile.split('.').pop()}`, (err) => {
       if(err) console.error('Error al enviar archivo:', err);
-      exec(`rm ${filePath}`);
+      require('fs').unlinkSync(outputFile); // Limpieza
     });
   } catch(e) {
     res.status(500).send('Error al descargar: ' + e.message);
